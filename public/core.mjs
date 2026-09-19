@@ -38,9 +38,25 @@ export function extractCandidates(book, words, maxLength=320) {
   }
   return result;
 }
-export function recommend(books, words, {limit=3,seen=[],short=false,topic='all'}={}) {
+// IDs keep the book identity and paragraph range, including for older saved records.
+export function isRead(article, history=[]) {
+  const range=/^(.*)-(\d+)-(\d+)$/;
+  const current=article.id.match(range);
+  return history.some(record=>{
+    if(record.id===article.id)return true;
+    const previous=record.id?.match(range);
+    return !!(current&&previous&&current[1]===previous[1]&&Number(current[2])<=Number(previous[3])&&Number(previous[2])<=Number(current[3]));
+  });
+}
+export function markRead(history, article, date) {
+  return history.some(record=>record.id===article.id)?history:[...history,{id:article.id,date}];
+}
+export function recommend(books, words, {limit=3,seen=[],short=false,topic='all',read=[],readMode='unread'}={}) {
   let candidates=books.filter(b=>topic==='all'||b.topic===topic).flatMap(b=>extractCandidates(b,words,short?190:320));
+  candidates=candidates.filter(a=>readMode==='all'||(readMode==='read'?isRead(a,read):!isRead(a,read)));
   const selected=[], covered=new Set(), seenSet=new Set(seen);
+  const unseen=candidates.filter(a=>!seenSet.has(a.id));
+  if(unseen.length)candidates=unseen;
   while(selected.length<limit && candidates.length) {
     candidates.sort((a,b)=>(b.score+matches(b.paragraphs.join(' '),words.filter(w=>!covered.has(w))).length*100-(seenSet.has(b.id)?200:0))-(a.score+matches(a.paragraphs.join(' '),words.filter(w=>!covered.has(w))).length*100-(seenSet.has(a.id)?200:0)));
     const next=candidates.shift(); selected.push(next); next.hits.forEach(w=>covered.add(w));

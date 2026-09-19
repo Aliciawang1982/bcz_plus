@@ -1,4 +1,4 @@
-import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend} from './core.mjs';
+import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const DEFAULT={words:SAMPLE,label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};
@@ -6,6 +6,7 @@ let state,storageOK=true;
 try{const saved=JSON.parse(localStorage.getItem('word-trails-v1')||'null');state=saved&&Array.isArray(saved.words)&&saved.reviews&&Array.isArray(saved.read)?{...DEFAULT,...saved,preferences:{...DEFAULT.preferences,...saved.preferences}}:structuredClone(DEFAULT);}catch{state=structuredClone(DEFAULT);storageOK=false;}
 let draft=[...state.words], articles=[],requestId=0,currentArticle=null,currentQuiz=[],seen=[],toastTimer,worker=null,workerPromise=null,previewURLs=[],busyOCR=false,libraryPromise=null,localBooks=[],localBooksPromise=null,zipPromise=null;
 const asset=relative=>new URL(relative,import.meta.url).href;
+let readMode='unread', readerFinished=false;
 function fetchWithTimeout(url,ms=30000,options={}){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),ms);
@@ -100,18 +101,29 @@ async function recommendations(){
  const due=dueReviews().map(([w])=>w);const words=[...new Set([...state.words,...due])].slice(0,100);
  try{
   const library=await loadAllBooks();
-  const selected=recommend(library,words,{short:state.preferences.short,topic:state.preferences.topic,seen:seen.slice(-30)});
+  const options={short:state.preferences.short,topic:state.preferences.topic,read:state.read,readMode};
+  const selected=recommend(library,words,{...options,seen});
+  const hasRead=readMode==='unread'&&!selected.length&&recommend(library,words,{...options,readMode:'read',limit:1}).length>0;
   const data={articles:selected,libraryCount:library.length,unmatched:words.filter(w=>!selected.some(a=>a.hits.includes(w)))};
   if(id!==requestId)return;
   articles=data.articles;seen.push(...articles.map(a=>a.id));
-  $('#recommend-caption').textContent=`从 ${data.libraryCount} 部经典作品中匹配原文${due.length?'，同时带上到期复习词':''}。`;
-  $('#articles').innerHTML=articles.length?articles.map((a,i)=>`<article class="article-card"><div class="card-cover cover-${i}"><div class="cover-label">${esc(a.topic)} / ORIGINAL READING</div><div class="cover-title">${esc(a.author.split(' ').slice(-1)[0])}<br><i>in context.</i></div><div class="cover-line"></div></div><div class="card-content"><div class="card-meta"><span>${esc(a.difficulty)} · 约 ${a.minutes} 分钟</span><span>0${i+1}</span></div><h3>${esc(a.title)}</h3><p class="card-preview">${esc(a.paragraphs.find(p=>a.hits.some(w=>wordRegex(w).test(p)))||a.paragraphs[0])}</p><div class="chips">${a.hits.map(w=>`<span class="chip">${esc(w)}</span>`).join('')}</div><div class="card-bottom"><span>${a.wordCount} 词 · Gutenberg 原文选段</span><button data-read="${i}">开始阅读 ↗</button></div></div></article>`).join(''):'<div class="empty"><h3>这次还没有合适的选段。</h3><p>试试「全部主题」或更长的阅读长度；下方也可继续查找网络原文。</p></div>';
+  $('#recommend-caption').textContent=`从 ${data.libraryCount} 部作品中匹配${readMode==='read'?'已读':'未读'}选段${due.length?'，同时带上到期复习词':''}。同一本书的不同选段会分别记录。`;
+  if(articles.length)renderArticleCards();
+  else $('#articles').innerHTML=readMode==='read'?'<div class="empty"><h3>当前条件下还没有已读选段。</h3><button class="btn secondary" data-reading-mode="unread">返回未读推荐</button></div>':hasRead?'<div class="empty"><h3>当前条件下的匹配选段已读完。</h3><p>可以更换词表、主题或导入新书，也可以主动重读。</p><button class="btn secondary" data-reading-mode="read">查看已读内容</button></div>':'<div class="empty"><h3>这次还没有合适的选段。</h3><p>试试「全部主题」或更长的阅读长度；下方也可继续查找网络原文。</p></div>';
   if(data.unmatched.length)$('#unmatched').innerHTML=`本组未覆盖：${data.unmatched.map(w=>`<a href="https://www.bing.com/search?q=${encodeURIComponent('"'+w+'" English article') }" target="_blank" rel="noopener noreferrer">${esc(w)} ↗</a>`).join('')}<br>点击可自行搜索更多原文；外部搜索结果尚未核实。`;
  }catch(e){if(id===requestId)$('#articles').innerHTML='<div class="empty"><h3>暂时无法加载原文</h3><p>请检查网络，再点击「换一组」重试。首次打开需要下载原文库。</p></div>';}
  finally{if(id===requestId)$('#refresh').disabled=false;}
 }
+function renderArticleCards(){
+ $('#articles').innerHTML=articles.map((a,i)=>{
+  const completed=isRead(a,state.read);
+  return `<article class="article-card"><div class="card-cover cover-${i}"><div class="cover-label">${esc(a.topic)} / ORIGINAL READING</div><div class="cover-title">${esc(a.author.split(' ').slice(-1)[0])}<br><i>in context.</i></div><div class="cover-line"></div></div><div class="card-content"><div class="card-meta"><span>${esc(a.difficulty)} · 约 ${a.minutes} 分钟</span><span class="read-status">${completed?'✓ 已读':'未读'}</span></div><h3>${esc(a.title)}</h3><p class="card-preview">${esc(a.paragraphs.find(p=>a.hits.some(w=>wordRegex(w).test(p)))||a.paragraphs[0])}</p><div class="chips">${a.hits.map(w=>`<span class="chip">${esc(w)}</span>`).join('')}</div><div class="card-bottom"><span>${a.wordCount} 词 · ${a.local?'本机电子书':'Gutenberg 原文选段'}</span><button data-read="${i}">${completed?'重新阅读':'开始阅读'} ↗</button></div></div></article>`;
+ }).join('');
+}
+function changeReadMode(mode){readMode=mode;$('#reading-mode').value=mode;seen=[];recommendations();}
 function openReader(index){
  currentArticle=articles[index];if(!currentArticle)return;
+ readerFinished=false;
  currentQuiz=buildQuiz(currentArticle,[...new Set([...state.words,...dueReviews().map(([w])=>w)])]);
  const sourceLine=currentArticle.local?`<span>本机电子书 · 不上传</span><p>${esc(currentArticle.license)}</p>`:`<a href="${esc(currentArticle.source)}" target="_blank" rel="noopener noreferrer">查看原作 ↗</a><a href="${esc(currentArticle.mirror)}" target="_blank" rel="noopener noreferrer">纯文本镜像 ↗</a><p>${esc(currentArticle.license)}</p>`;
  $('#reader-content').innerHTML=`<div class="reader-body"><span class="pill" style="background:#eaf0df">${esc(currentArticle.topic)} · 原版选段 · ${currentArticle.wordCount} 词</span><h2>${esc(currentArticle.title)}</h2><p class="byline">${esc(currentArticle.author)} · 约 ${currentArticle.minutes} 分钟</p><p class="hint">点击高亮词查看常用释义。以下段落保持原文，未作简写。</p><div class="reader-article">${currentArticle.paragraphs.map(p=>`<p>${highlight(p)}</p>`).join('')}</div><div class="source-line">${sourceLine}</div><button class="btn primary full reading-action" id="finish-reading">读完了，用原句巩固一下 →</button><div id="reading-quiz"></div></div>`;
@@ -119,8 +131,9 @@ function openReader(index){
 }
 function quizHTML(q,index,context){return `<div class="question"><p>${esc(q.prompt)}</p><form class="answer-row" data-quiz-context="${context}" data-index="${index}"><input name="answer" aria-label="${context==='review'?'复习':'阅读'}第 ${index+1} 题答案" placeholder="填入原句中的词形" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="40"><button class="btn primary" type="submit">核对答案</button></form><div class="feedback" aria-live="polite"></div></div>`;}
 function finishReading(){
- const date=localDate();if(!state.read.some(r=>r.id===currentArticle.id&&r.date===date))state.read.push({id:currentArticle.id,date});
- state.read=state.read.slice(-1000);save();stats();
+ // Keep every completed range. Re-reading must not discard older records or count as new reading.
+ if(!isRead(currentArticle,state.read))state.read=markRead(state.read,currentArticle,localDate());
+ save();stats();readerFinished=true;renderArticleCards();
  $('#finish-reading').hidden=true;
  $('#reading-quiz').innerHTML=`<div class="quiz-box"><h3>把熟悉，变成记得。</h3><p class="hint">根据刚刚的原句填空。答题后安排下一次复习。</p>${currentQuiz.map((q,i)=>quizHTML(q,i,'reading')).join('')}</div>`;
  $('#reading-quiz').scrollIntoView({behavior:'smooth',block:'start'});
@@ -189,6 +202,7 @@ document.addEventListener('click',event=>{
  if(target.dataset.page)page(target.dataset.page);
  if(target.dataset.word)showWord(target.dataset.word);
  if(target.dataset.read!==undefined)openReader(Number(target.dataset.read));
+ if(target.dataset.readingMode)changeReadMode(target.dataset.readingMode);
  if(target.dataset.remove){draft=draft.filter(w=>w!==target.dataset.remove);$('#word-input').value=draft.join('\n');renderDraft();}
  if(target.dataset.deleteBook){removeLocalBook(target.dataset.deleteBook).then(()=>{localBooks=localBooks.filter(book=>book.id!==target.dataset.deleteBook);localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();seen=[];recommendations();toast('本机电子书已删除。');}).catch(()=>toast('删除失败，请重试。'));}
  if(target.id==='finish-reading')finishReading();
@@ -205,6 +219,8 @@ $('#save-words').onclick=()=>{
 $('#screenshots').onchange=e=>recognize(e.target.files);
 $('#ebooks').onchange=e=>importLocalBooks(e.target.files);
 $('#refresh').onclick=recommendations;
+$('#reading-mode').onchange=e=>changeReadMode(e.target.value);
+$('#reader').addEventListener('close',()=>{if(readerFinished){readerFinished=false;recommendations();}});
 $('#start-reading').onclick=()=>articles.length?openReader(0):$('#articles').scrollIntoView({behavior:'smooth'});
 $('#close-reader').onclick=()=>$('#reader').close();$('#close-word').onclick=()=>$('#word-dialog').close();
 $('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();

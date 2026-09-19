@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+ <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+ <meta name="theme-color" content="#214f40"><meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-title" content="词间"><meta name="description" content="让背过的单词，在真实的英文阅读里再次相遇。">
+ <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest">
+ <link rel="stylesheet" href="./style.css"><title>词间 · Word Trails</title>
+</head>
+<body>
+ <div class="shell">
+  <aside class="sidebar">
+   <a class="brand" href="#home" aria-label="词间首页"><span class="brand-icon">w<span>·</span></span><span>词间<small>WORD TRAILS</small></span></a>
+   <div class="nav-caption">你的阅读小径</div>
+   <nav aria-label="主要导航">
+    <button class="nav-item active" data-page="home"><span class="nav-icon">▤</span><span>今日阅读</span><span class="nav-dot"></span></button>
+    <button class="nav-item" data-page="import"><span class="nav-icon">＋</span><span>我的词表</span></button>
+    <button class="nav-item" data-page="review"><span class="nav-icon">↻</span><span>温故知新</span><span id="review-badge" class="badge"></span></button>
+   </nav>
+   <div class="sidebar-bottom"><div class="small-leaf">❧</div><p>单词有了语境，<br>记忆就有了方向。</p><span>一点点读，慢慢记住。</span></div>
+  </aside>
+  <main id="main">
+   <header class="topbar"><span id="date-label"></span><span class="top-note"><i></i> 每天一小段，离英语近一点</span></header>
+   <section id="page-home" class="page">
+    <div class="heading"><div><div class="eyebrow">A LITTLE READING, EVERY DAY</div><h1>让单词，<span>走进故事。</span></h1><p>从词表出发，在真实的英文里再次相遇。</p></div><button class="btn primary" data-page="import">＋ 导入单词</button></div>
+    <div class="hero"><div class="hero-copy"><span class="pill light">你的阅读，从这里开始</span><h2>背过的词，<br>值得再遇见一次。</h2><p>读一小段原文，看一个熟悉的词，<br>在新的句子里变得鲜活。</p><button class="btn cream" id="start-reading">开始今天的阅读 <span>↗</span></button></div><div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="book back-book"></div><div class="book front-book"><div class="book-small">A WORD CAN OPEN</div><div class="book-title">a whole<br><i>new world.</i></div><div class="book-rule"></div><div class="book-footer">READ. DISCOVER. REMEMBER.</div></div><span class="floating-word word-a">anguish</span><span class="floating-word word-b">a little discovery ↗</span><span class="star">✳</span></div></div>
+    <div class="stats"><div><span class="stat-label">本次词表</span><strong id="stat-words">7<small> 个词</small></strong></div><div><span class="stat-label">今日读完</span><strong id="stat-read">0<small> 篇原文</small></strong></div><div><span class="stat-label">到期复习</span><strong id="stat-review">0<small> 个词</small></strong></div><div class="stats-note"><span>“</span>不是多背一次，<br>是多理解一点。</div></div>
+    <section class="word-strip"><div><strong>这次，和这些词重逢</strong><span id="list-label" class="muted">截图示例 · 7 个词</span></div><div id="home-words" class="chips"></div><button class="text-btn" data-page="import">编辑词表 ↗</button></section>
+    <div class="section-head"><div><h2>为你挑选的原文 <span class="tiny-tag">经典选读</span></h2><p id="recommend-caption">从真实原文中，寻找目标词出现的段落。</p></div><button class="text-btn" id="refresh">换一组 ↻</button></div>
+    <div class="filters"><label>阅读长度 <select id="length"><option value="normal">约 2–3 分钟</option value="short">约 1–2 分钟</option></select></label><label>内容偏好 <select id="topic"><option value="all">全部主题</option><option value="推理">推理故事</option><option value="文学">文学经典</option></select></label><span>原文选段 · 未经 AI 改写</span></div>
+    <div id="articles" class="article-grid" aria-live="polite"></div><div id="unmatched" class="unmatched"></div>
+    <footer>词间 WORD TRAILS <span>让每一个单词，都有来处。</span><button class="text-btn" id="about">使用说明</button></footer>
+   </section>
+   <section id="page-import" class="page" hidden>
+    <div class="eyebrow">YOUR WORDS, YOUR JOURNEY</div><h1>从你的词表出发。</h1><p class="lead">上传百词斩截图，或粘贴从「实况文本」复制的单词。</p>
+    <div class="import-grid"><section class="panel"><div class="step">01 / 导入</div><h2>今天，想读哪些词？</h2><div class="upload-zone"><span class="upload-symbol">＋</span><strong>选择词表截图</strong><p>支持多张 JPG、PNG · 图片在本机识别</p><input id="screenshots" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-label="选择词表截图"></div><p id="ocr-status" class="status" role="status">被遮挡或模糊的词，请在下方核对后补全。</p><div id="previews" class="previews"></div><label for="word-input" class="field-label">或直接粘贴单词</label><textarea id="word-input" rows="7" placeholder="exonerate&#10;stigma&#10;anguish" spellcheck="false" autocapitalize="none"></textarea><p class="hint">支持换行、空格或逗号分隔。最多 100 个词，自动去重。</p><div class="row"><button class="btn secondary" id="parse-words">整理词表 →</button><button class="text-btn" id="load-sample">填入截图示例</button></div></section>
+    <section class="panel"><div class="step">02 / 核对</div><h2>每个词，都由你确认。</h2><p class="muted">点击 × 去掉误识别项；拼写可在左侧修改后重新整理。</p><div id="draft-words" class="chips draft"></div><p id="draft-count" class="hint"></p><label class="field-label" for="purpose">这批单词的用途</label><select id="purpose"><option value="待复习">待复习</option><option value="今日学习">今日学习</option><option value="自由选词">自由选词</option></select><p class="hint">截图中的「学习中」不等于今天新学；此处由你指定。</p><label class="checkline"><input id="merge-words" type="checkbox" checked> 合并到现有词表</label><button class="btn primary full" id="save-words">确认词表，寻找原文 ↗</button><div class="tip"><strong>iPhone 小技巧</strong><p>在相册中长按单词，使用「实况文本」复制，再粘贴到这里。截图时上下保留一两个重复词即可。</p></div></section></div>
+   </section>
+   <section id="page-review" class="page" hidden><div class="eyebrow">MEET AGAIN, REMEMBER LONGER</div><h1>再遇见，就更熟悉。</h1><p class="lead">从你读过的原句出发，看看离开提示，还能不能想起来。</p><div id="review-content"></div></section>
+  </main>
+ </div>
+ <dialog id="reader"><div class="reader-top"><span>WORD TRAILS / 原文阅读</span><button class="icon-btn" id="close-reader" aria-label="关闭阅读">×</button></div><div id="reader-content"></div></dialog>
+ <dialog id="word-dialog"><button class="icon-btn dialog-close" id="close-word" aria-label="关闭释义">×</button><div id="word-detail"></div></dialog>
+ <dialog id="about-dialog"><button class="icon-btn dialog-close" id="close-about" aria-label="关闭说明">×</button><div class="about-content"><div class="eyebrow">HELLO, WORD TRAILS</div><h2>欢迎来到词间。</h2><p>这是可运行的第一版：导入词表，阅读经典英文选段，再用原句填空巩固。</p><p>目前内容来自 Project Gutenberg 的经典作品，通过公开镜像建立本地原文库。推荐会核实目标词及支持的词形是否实际出现在选段中；暂未覆盖全网新闻。</p><p>难度标签按选段长度粗略划分，不是英语水平测评。词典提供常用释义，并非自动生成的语境翻译。</p><p>词表和复习进度保存在当前浏览器。清除网站数据或更换设备不会同步；图片只在浏览器识别，不上传到服务器。</p><p>iPhone 使用：通过 Safari 打开正式网站，选择「分享 → 添加到主屏幕」。网站独立运行，不需要电脑开机；首次使用需联网下载原文库和识别组件。</p></div></dialog>
+ <div id="toast" class="toast" role="status" hidden></div>
+ <script type="module" src="./app.mjs"></script>
+</body></html>

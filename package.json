@@ -1,0 +1,5 @@
+{
+  "name": "word-trails", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": { "start": "node server.mjs", "preview:pages": "node scripts/preview-static.mjs", "test": "node --test", "prepare-data": "node scripts/prepare-data.mjs" },
+  "engines": { "node": ">=20" }
+}

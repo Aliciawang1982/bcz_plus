@@ -54,6 +54,10 @@ node scripts/preview-static.mjs
 - 浏览器 localStorage 保存词表、偏好、阅读和答题进度。无帐号、跨设备同步或通知。
 - 移动端布局、Web App manifest、Service Worker 缓存已访问的页面、原文库与 OCR 资源。HTTPS 或 localhost 下启用；离线时仅能使用已完整缓存的资源。
 
+## 本机电子书
+
+导入页支持 EPUB、TXT。EPUB 在浏览器内解压并按阅读顺序提取章节，内容存入当前设备 IndexedDB，不上传 GitHub；可在导入页删除本机书籍。GitHub Pages 只包含解析程序和开源 JSZip 组件，不包含用户电子书。普通受版权保护的期刊应通过本机导入使用，不加入公开原文库。
+
 ## 内容来源与当前边界
 
 目前为 **3 部英文经典作品的本地原文检索**，不是全网新闻搜索。作品为 Arthur Conan Doyle《The Adventures of Sherlock Holmes》、Nathaniel Hawthorne《The Scarlet Letter》和 Bram Stoker《Dracula》。原文来自 Project Gutenberg，下载通过 GITenberg 的 jsDelivr 镜像；每条选段保留原作与镜像链接。完整下载文件（含 Gutenberg 许可说明）保存在 `data/originals/`。

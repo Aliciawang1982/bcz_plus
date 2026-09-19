@@ -32,7 +32,7 @@ export function extractCandidates(book, words, maxLength=320) {
     const paragraphs=paras.slice(start,end+1), text=paragraphs.join('\n\n');
     const hits=matches(text,words);
     result.push({id:`${book.id}-${start}-${end}`,title:book.title,author:book.author,source:book.source,
-      mirror:book.mirror,license:book.license,topic:book.topic,paragraphs,hits,wordCount:length,
+      mirror:book.mirror,license:book.license,topic:book.topic,local:!!book.local,paragraphs,hits,wordCount:length,
       minutes:Math.max(1,Math.ceil(length/110)),difficulty: length>220?'进阶阅读':'短篇起步',
       score:hits.length*100-Math.abs(length-170)/5});
   }

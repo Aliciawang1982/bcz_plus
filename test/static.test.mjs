@@ -20,3 +20,8 @@ test('OCR 模型和两种浏览器 WASM 内核已包含在部署文件中',async
   assert.ok((await stat(publicFile(file))).size>1000000,file);
  }
 });
+test('本机电子书功能不把用户内容写进静态原文库',async()=>{
+ const [html,app,zip]=await Promise.all([readFile(publicFile('index.html'),'utf8'),readFile(publicFile('app.mjs'),'utf8'),stat(publicFile('vendor/jszip.min.js'))]);
+ assert.match(html,/id="ebooks"/);assert.match(app,/word-trails-local/);assert.match(app,/IndexedDB/);assert.ok(zip.size>50000);
+ assert.doesNotMatch(await readFile(publicFile('library.json'),'utf8'),/本机文件/);
+});

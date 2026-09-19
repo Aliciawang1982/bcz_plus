@@ -6,8 +6,13 @@ let state,storageOK=true;
 try{const saved=JSON.parse(localStorage.getItem('word-trails-v1')||'null');state=saved&&Array.isArray(saved.words)&&saved.reviews&&Array.isArray(saved.read)?{...DEFAULT,...saved,preferences:{...DEFAULT.preferences,...saved.preferences}}:structuredClone(DEFAULT);}catch{state=structuredClone(DEFAULT);storageOK=false;}
 let draft=[...state.words], articles=[],requestId=0,currentArticle=null,currentQuiz=[],seen=[],toastTimer,worker=null,workerPromise=null,previewURLs=[],busyOCR=false,libraryPromise=null;
 const asset=relative=>new URL(relative,import.meta.url).href;
+function fetchWithTimeout(url,ms=30000,options={}){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),ms);
+ return fetch(url,{...options,signal:controller.signal}).finally(()=>clearTimeout(timer));
+}
 function loadLibrary(){
- if(!libraryPromise)libraryPromise=fetch(asset('library.json'),{signal:AbortSignal.timeout(30000)}).then(r=>{if(!r.ok)throw Error('原文库暂时无法加载');return r.json();}).catch(e=>{libraryPromise=null;throw e;});
+ if(!libraryPromise)libraryPromise=fetchWithTimeout(asset('library.json')).then(r=>{if(!r.ok)throw Error('原文库暂时无法加载');return r.json();}).catch(e=>{libraryPromise=null;throw e;});
  return libraryPromise;
 }
 const dictionary={exonerate:['v.','免除责任；证明无罪'],stigma:['n.','污名；耻辱的标记'],anguish:['n. / v.','极度痛苦；使极度痛苦'],pictorial:['adj.','图画的；用图片表达的'],dynamite:['n. / v.','炸药；用炸药爆破'],jot:['v. / n.','匆匆记下；少量，一点点'],revoke:['v.','撤销；废除']};

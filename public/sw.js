@@ -1,4 +1,4 @@
-const CACHE='word-trails-static-v2';
+const CACHE='word-trails-static-v3';
 const asset=path=>new URL(path,self.registration.scope).href;
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(['./','style.css','app.mjs','core.mjs','icon.svg'].map(asset))));self.skipWaiting();});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>(k.startsWith('word-trails-shell-')||k.startsWith('word-trails-static-'))&&k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});

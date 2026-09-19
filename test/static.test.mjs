@@ -10,6 +10,8 @@ test('静态入口支持 GitHub Pages 仓库子路径',async()=>{
 });
 test('推荐完全在客户端运行，静态原文库与已核实来源一致',async()=>{
  const app=await readFile(publicFile('app.mjs'),'utf8');assert.doesNotMatch(app,/fetch\([^\n]*\/api\//);
+ assert.doesNotMatch(app,/AbortSignal\.timeout/);
+ assert.match(app,/function fetchWithTimeout/);
  const deployed=await readFile(publicFile('library.json'),'utf8');
  const original=await readFile(new URL('../data/books.json',import.meta.url),'utf8');assert.equal(deployed,original);
 });

@@ -76,6 +76,8 @@ node scripts/preview-static.mjs
 
 ## 检查与数据更新
 
+页面样式、入口脚本及其模块依赖使用同一发布版本参数，避免手机混用新页面和旧脚本。更新这些文件时，同步修改 `index.html`、`app.mjs`、`sw.js` 中的版本参数及 Service Worker 缓存名；测试会核对页面依赖和预缓存 URL。代码请求重新校验 HTTP 缓存，断网时只使用对应版本的缓存。该机制不清除 localStorage 或 IndexedDB 中的学习数据。
+
 ```powershell
 node --test
 node scripts/prepare-data.mjs

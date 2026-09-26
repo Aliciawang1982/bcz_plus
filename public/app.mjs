@@ -1,5 +1,5 @@
-import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs';
-import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs';
+import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs?v=20260926-2';
+import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs?v=20260926-2';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const DEFAULT={words:SAMPLE,mastered:[],label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};
@@ -265,4 +265,4 @@ $('#date-label').textContent=new Date().toLocaleDateString('zh-CN',{month:'long'
 window.addEventListener('hashchange',()=>page(location.hash.slice(1)));
 stats();renderDraft();renderLocalBooks();page(location.hash.slice(1)||'home');recommendations();
 if(!storageOK)toast('当前浏览器无法持久保存进度。');
-if('serviceWorker' in navigator&&window.isSecureContext)navigator.serviceWorker.register(asset('sw.js')).catch(()=>{});
+if('serviceWorker' in navigator&&window.isSecureContext)navigator.serviceWorker.register(asset('sw.js'),{updateViaCache:'none'}).catch(()=>{});

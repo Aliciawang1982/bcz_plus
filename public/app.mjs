@@ -1,12 +1,15 @@
 import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs';
+import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const DEFAULT={words:SAMPLE,label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};
+const DEFAULT={words:SAMPLE,mastered:[],label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};
 let state,storageOK=true;
 try{const saved=JSON.parse(localStorage.getItem('word-trails-v1')||'null');state=saved&&Array.isArray(saved.words)&&saved.reviews&&Array.isArray(saved.read)?{...DEFAULT,...saved,preferences:{...DEFAULT.preferences,...saved.preferences}}:structuredClone(DEFAULT);}catch{state=structuredClone(DEFAULT);storageOK=false;}
 let draft=[...state.words], articles=[],requestId=0,currentArticle=null,currentQuiz=[],seen=[],toastTimer,worker=null,workerPromise=null,previewURLs=[],busyOCR=false,libraryPromise=null,localBooks=[],localBooksPromise=null,zipPromise=null;
 const asset=relative=>new URL(relative,import.meta.url).href;
 let readMode='unread', readerFinished=false;
+let undoVocabulary=null;
+if(!Array.isArray(state.mastered))state.mastered=[];
 function fetchWithTimeout(url,ms=30000,options={}){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),ms);
@@ -71,20 +74,35 @@ async function importLocalBooks(files){
 const dictionary={exonerate:['v.','免除责任；证明无罪'],stigma:['n.','污名；耻辱的标记'],anguish:['n. / v.','极度痛苦；使极度痛苦'],pictorial:['adj.','图画的；用图片表达的'],dynamite:['n. / v.','炸药；用炸药爆破'],jot:['v. / n.','匆匆记下；少量，一点点'],revoke:['v.','撤销；废除']};
 function save(){try{localStorage.setItem('word-trails-v1',JSON.stringify(state));}catch{storageOK=false;toast('当前浏览器无法保存，请勿关闭页面；可复制词表备份。');}}
 function toast(message){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,4000);}
-function dueReviews(){return Object.entries(state.reviews).filter(([,r])=>r.due<=Date.now());}
+function dueReviews(){return learningReviews(state).filter(([,r])=>r.due<=Date.now());}
 function stats(){
- $('#stat-words').innerHTML=`${state.words.length}<small> 个词</small>`;
+ const active=learningWords(state);
+ $('#stat-words').innerHTML=`${active.length}<small> 个待学词</small>`;
  $('#stat-read').innerHTML=`${state.read.filter(x=>x.date===localDate()).length}<small> 篇原文</small>`;
  $('#stat-review').innerHTML=`${dueReviews().length}<small> 个词</small>`;
  $('#review-badge').textContent=dueReviews().length||'';
- $('#list-label').textContent=state.label;
- $('#home-words').innerHTML=state.words.slice(0,12).map(w=>`<button class="chip" data-word="${esc(w)}">${esc(w)}</button>`).join('')+(state.words.length>12?`<span class="chip">+${state.words.length-12}</span>`:'');
+ $('#list-label').textContent=`词库 ${state.words.length} 词 · 已掌握 ${state.words.length-active.length} 词`;
+ $('#home-words').innerHTML=active.slice(0,12).map(w=>`<button class="chip" data-word="${esc(w)}">${esc(w)}</button>`).join('')+(active.length>12?`<span class="chip">+${active.length-12}</span>`:'');
+}
+function renderVocabulary(){
+ const filter=$('#vocabulary-filter').value,query=$('#vocabulary-search').value.trim().toLowerCase();
+ const mastered=new Set(state.mastered);
+ const words=state.words.filter(w=>w.includes(query)&&(filter==='all'||(filter==='mastered'?mastered.has(w):!mastered.has(w))));
+ $('#vocabulary-count').textContent=`共 ${state.words.length} 词 · 学习中 ${learningWords(state).length} · 已掌握 ${state.words.filter(w=>mastered.has(w)).length}`;
+ $('#vocabulary-list').innerHTML=words.length?words.map(word=>`<div class="vocabulary-row"><form data-edit-vocabulary="${esc(word)}"><label class="sr-only" for="vocab-${esc(word)}">编辑 ${esc(word)}</label><input id="vocab-${esc(word)}" name="word" value="${esc(word)}" maxlength="32" autocapitalize="none" autocomplete="off" spellcheck="false" required><button type="submit" class="text-btn" aria-label="保存 ${esc(word)} 的拼写">保存拼写</button></form><span class="vocabulary-state">${mastered.has(word)?'✓ 已掌握':'学习中'}</span><div class="vocabulary-actions"><button class="btn secondary" data-mastery="${esc(word)}" aria-label="${mastered.has(word)?'恢复学习':'标为已掌握'} ${esc(word)}">${mastered.has(word)?'恢复学习':'标为已掌握'}</button><button class="text-btn" data-delete-word="${esc(word)}" aria-label="移除 ${esc(word)}">移除</button></div></div>`).join(''):'<p class="hint">没有符合条件的单词。</p>';
+ $('#undo-vocabulary').hidden=!undoVocabulary;
+}
+function vocabularyChanged(next,message){
+ undoVocabulary={words:[...state.words],mastered:[...state.mastered],reviews:structuredClone(state.reviews)};
+ state={...next,isSample:false};save();
+ draft=[...state.words];$('#word-input').value=draft.join('\n');
+ stats();renderDraft();renderVocabulary();renderReview();seen=[];recommendations();toast(message);
 }
 function page(name){
  if(!['home','import','review'].includes(name))name='home';
  $$('.page').forEach(p=>p.hidden=p.id!==`page-${name}`);$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
  if(name==='review')renderReview();
- if(name==='import'){$('#word-input').value=draft.join('\n');renderDraft();}
+ if(name==='import'){$('#word-input').value=draft.join('\n');renderDraft();renderVocabulary();}
  history.replaceState(null,'',`#${name}`);window.scrollTo({top:0});
 }
 function renderDraft(){
@@ -93,12 +111,17 @@ function renderDraft(){
  $('#save-words').disabled=!draft.length||busyOCR;
 }
 function highlight(text){
- const map=new Map();[...new Set([...state.words,...dueReviews().map(([w])=>w)])].forEach(w=>forms(w).forEach(f=>map.set(f,w)));
+ const map=new Map();learningWords(state).forEach(w=>forms(w).forEach(f=>map.set(f,w)));
  return text.split(/([A-Za-z]+(?:['’-][A-Za-z]+)*)/g).map(t=>map.has(t.toLowerCase())?`<button class="highlight" data-word="${esc(map.get(t.toLowerCase()))}" aria-label="查看 ${esc(t)} 释义">${esc(t)}</button>`:esc(t)).join('');
 }
 async function recommendations(){
  const id=++requestId;$('#articles').innerHTML='<div class="loading">正在从原文中寻找你的单词…</div>';$('#unmatched').textContent='';$('#refresh').disabled=true;
- const due=dueReviews().map(([w])=>w);const words=[...new Set([...state.words,...due])].slice(0,100);
+ const due=dueReviews().map(([w])=>w);const words=learningWords(state);
+ if(!words.length){
+  articles=[];$('#refresh').disabled=false;
+  $('#recommend-caption').textContent='只为学习中的单词推荐阅读。';
+  $('#articles').innerHTML=`<div class="empty"><h3>${state.words.length?'当前词库中的单词已全部掌握。':'词库里还没有单词。'}</h3><p>可以添加新词，或在词库中将单词恢复学习。</p><button class="btn secondary" data-page="import">管理我的词库</button></div>`;return;
+ }
  try{
   const library=await loadAllBooks();
   const options={short:state.preferences.short,topic:state.preferences.topic,read:state.read,readMode};
@@ -124,7 +147,7 @@ function changeReadMode(mode){readMode=mode;$('#reading-mode').value=mode;seen=[
 function openReader(index){
  currentArticle=articles[index];if(!currentArticle)return;
  readerFinished=false;
- currentQuiz=buildQuiz(currentArticle,[...new Set([...state.words,...dueReviews().map(([w])=>w)])]);
+ currentQuiz=buildQuiz(currentArticle,learningWords(state));
  const sourceLine=currentArticle.local?`<span>本机电子书 · 不上传</span><p>${esc(currentArticle.license)}</p>`:`<a href="${esc(currentArticle.source)}" target="_blank" rel="noopener noreferrer">查看原作 ↗</a><a href="${esc(currentArticle.mirror)}" target="_blank" rel="noopener noreferrer">纯文本镜像 ↗</a><p>${esc(currentArticle.license)}</p>`;
  $('#reader-content').innerHTML=`<div class="reader-body"><span class="pill" style="background:#eaf0df">${esc(currentArticle.topic)} · 原版选段 · ${currentArticle.wordCount} 词</span><h2>${esc(currentArticle.title)}</h2><p class="byline">${esc(currentArticle.author)} · 约 ${currentArticle.minutes} 分钟</p><p class="hint">点击高亮词查看常用释义。以下段落保持原文，未作简写。</p><div class="reader-article">${currentArticle.paragraphs.map(p=>`<p>${highlight(p)}</p>`).join('')}</div><div class="source-line">${sourceLine}</div><button class="btn primary full reading-action" id="finish-reading">读完了，用原句巩固一下 →</button><div id="reading-quiz"></div></div>`;
  $('#reader').showModal();$('#reader').scrollTop=0;
@@ -140,13 +163,14 @@ function finishReading(){
 }
 let reviewQuiz=[];
 function renderReview(){
- const all=Object.entries(state.reviews),due=dueReviews();reviewQuiz=due.map(([word,r])=>({...r.quiz,word}));
+ const all=learningReviews(state),due=dueReviews();reviewQuiz=due.map(([word,r])=>({...r.quiz,word}));
  $('#review-content').innerHTML=`<div class="review-summary"><div><strong>${due.length}</strong> 个词等待重逢</div><div><strong>${all.length}</strong> 个词已加入复习</div></div>`+
  (due.length?`<div class="review-list">${due.map(([word,r],i)=>`<article class="review-card"><div class="eyebrow">来自你读过的原文</div><h3>${esc(r.title)}</h3>${quizHTML(r.quiz,i,'review')}</article>`).join('')}</div>`:`<div class="empty"><h3>${all.length?'今天的复习已完成。':'读过的句子，会在这里等你。'}</h3><p>${all.length?`下次复习：${new Date(Math.min(...all.map(([,r])=>r.due))).toLocaleString('zh-CN',{month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}。`:'读完一篇原文并完成填空，就会自动安排复习。'}</p><button class="btn primary" data-page="home">去读一小段 ↗</button></div>`)+
  (all.length?`<div class="section-head" style="margin-top:32px"><h2>记忆足迹</h2><span class="muted">按答题结果安排 1、3、7、14、30 天复习</span></div><div class="chips">${all.map(([w,r])=>`<button class="chip" data-word="${esc(w)}">${esc(w)} · ${r.lastResult?'已答对':'再巩固'}</button>`).join('')}</div>`:'');
 }
 function submitQuiz(form){
  const context=form.dataset.quizContext,index=Number(form.dataset.index),q=context==='reading'?currentQuiz[index]:reviewQuiz[index];if(!q||form.dataset.done)return;
+ if(!learningWords(state).includes(q.word))return;
  const input=form.elements.answer.value.trim();if(!input)return;
  const correct=input.toLowerCase()===q.answer.toLowerCase();
  const previous=state.reviews[q.word];
@@ -203,17 +227,27 @@ document.addEventListener('click',event=>{
  if(target.dataset.word)showWord(target.dataset.word);
  if(target.dataset.read!==undefined)openReader(Number(target.dataset.read));
  if(target.dataset.readingMode)changeReadMode(target.dataset.readingMode);
+ if(target.dataset.mastery){const word=target.dataset.mastery;const mastered=!state.mastered.includes(word);vocabularyChanged(setMastered(state,word,mastered),mastered?'已掌握：不再用于推荐和复习。':'已恢复学习。');}
+ if(target.dataset.deleteWord)vocabularyChanged(deleteWord(state,target.dataset.deleteWord),'已移除单词，可点击「撤销上次修改」恢复。');
  if(target.dataset.remove){draft=draft.filter(w=>w!==target.dataset.remove);$('#word-input').value=draft.join('\n');renderDraft();}
  if(target.dataset.deleteBook){removeLocalBook(target.dataset.deleteBook).then(()=>{localBooks=localBooks.filter(book=>book.id!==target.dataset.deleteBook);localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();seen=[];recommendations();toast('本机电子书已删除。');}).catch(()=>toast('删除失败，请重试。'));}
  if(target.id==='finish-reading')finishReading();
 });
-document.addEventListener('submit',event=>{if(event.target.matches('[data-quiz-context]')){event.preventDefault();submitQuiz(event.target);}});
+document.addEventListener('submit',event=>{
+ if(event.target.matches('[data-quiz-context]')){event.preventDefault();submitQuiz(event.target);}
+ if(event.target.matches('[data-edit-vocabulary]')){event.preventDefault();try{const next=editWord(state,event.target.dataset.editVocabulary,event.target.elements.word.value);if(next!==state)vocabularyChanged(next,'拼写已更新；旧拼写的练习已移除。');}catch(e){toast(e.message);}}
+});
+$('#vocabulary-search').oninput=renderVocabulary;
+$('#vocabulary-filter').onchange=renderVocabulary;
+$('#undo-vocabulary').onclick=()=>{if(!undoVocabulary)return;state={...state,...undoVocabulary};undoVocabulary=null;save();draft=[...state.words];$('#word-input').value=draft.join('\n');stats();renderDraft();renderVocabulary();renderReview();seen=[];recommendations();toast('已撤销上次词库修改。');};
 $('#parse-words').onclick=()=>{draft=normalizeWords($('#word-input').value);renderDraft();toast(`已整理 ${draft.length} 个单词`);};
 $('#word-input').addEventListener('input',()=>{draft=normalizeWords($('#word-input').value);renderDraft();});
 $('#load-sample').onclick=()=>{draft=[...SAMPLE];$('#word-input').value=draft.join('\n');renderDraft();};
 $('#save-words').onclick=()=>{
  draft=normalizeWords($('#word-input').value);if(!draft.length){toast('请先输入英文单词。');return;}
  state.words=$('#merge-words').checked&&!state.isSample?[...new Set([...state.words,...draft])].slice(0,100):draft;
+ state.reviews=Object.fromEntries(Object.entries(state.reviews).filter(([w])=>state.words.includes(w)));
+ undoVocabulary=null;draft=[...state.words];renderVocabulary();
  state.label=`${$('#purpose').value} · 导入于 ${localDate()}`;state.isSample=false;save();stats();page('home');seen=[];recommendations();toast('词表已保存，开始在原文里遇见它们。');
 };
 $('#screenshots').onchange=e=>recognize(e.target.files);

@@ -5,7 +5,7 @@
  <meta name="theme-color" content="#214f40"><meta name="apple-mobile-web-app-capable" content="yes">
  <meta name="apple-mobile-web-app-title" content="词间"><meta name="description" content="让背过的单词，在真实的英文阅读里再次相遇。">
  <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.webmanifest">
- <link rel="stylesheet" href="./style.css?v=20260926-3"><title>词间 · Word Trails</title>
+ <link rel="stylesheet" href="./style.css?v=20260926-4"><title>词间 · Word Trails</title>
 </head>
 <body>
  <div class="shell">
@@ -23,7 +23,8 @@
    <header class="topbar"><span id="date-label"></span><span class="top-note"><i></i> 每天一小段，离英语近一点</span></header>
    <section id="page-home" class="page">
     <div class="heading"><div><div class="eyebrow">A LITTLE READING, EVERY DAY</div><h1>让单词，<span>走进故事。</span></h1><p>从词表出发，在真实的英文里再次相遇。</p></div><button class="btn primary" data-page="import">＋ 导入单词</button></div>
-    <div class="hero"><div class="hero-copy"><span class="pill light">你的阅读，从这里开始</span><h2>背过的词，<br>值得再遇见一次。</h2><p>读一小段原文，看一个熟悉的词，<br>在新的句子里变得鲜活。</p><button class="btn cream" id="start-reading">开始今天的阅读 <span>↗</span></button></div><div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="book back-book"></div><div class="book front-book"><div class="book-small">A WORD CAN OPEN</div><div class="book-title">a whole<br><i>new world.</i></div><div class="book-rule"></div><div class="book-footer">READ. DISCOVER. REMEMBER.</div></div><span class="floating-word word-a">anguish</span><span class="floating-word word-b">a little discovery ↗</span><span class="star">✳</span></div></div>
+    <section class="daily-section" aria-label="每日五分钟"><div class="section-head"><div><h2>每日五分钟 <span class="tiny-tag">自由阅读</span></h2><p>每天从本机电子书选一段，不限词表。按约 110 词/分钟估算。</p></div></div><div id="daily-reading" aria-live="polite"><p class="hint">正在读取本机书库…</p></div></section>
+    <div class="hero"><div class="hero-copy"><span class="pill light">你的阅读，从这里开始</span><h2>背过的词，<br>值得再遇见一次。</h2><p>读一小段原文，看一个熟悉的词，<br>在新的句子里变得鲜活。</p><button class="btn cream" id="start-reading">开始词表阅读 <span>↗</span></button></div><div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="book back-book"></div><div class="book front-book"><div class="book-small">A WORD CAN OPEN</div><div class="book-title">a whole<br><i>new world.</i></div><div class="book-rule"></div><div class="book-footer">READ. DISCOVER. REMEMBER.</div></div><span class="floating-word word-a">anguish</span><span class="floating-word word-b">a little discovery ↗</span><span class="star">✳</span></div></div>
     <div class="stats"><div><span class="stat-label">本次词表</span><strong id="stat-words">7<small> 个词</small></strong></div><div><span class="stat-label">今日读完</span><strong id="stat-read">0<small> 篇原文</small></strong></div><div><span class="stat-label">到期复习</span><strong id="stat-review">0<small> 个词</small></strong></div><div class="stats-note"><span>“</span>不是多背一次，<br>是多理解一点。</div></div>
     <section class="word-strip"><div><strong>这次，和这些词重逢</strong><span id="list-label" class="muted">截图示例 · 7 个词</span></div><div id="home-words" class="chips"></div><button class="text-btn" data-page="import">编辑词表 ↗</button></section>
     <div class="section-head"><div><h2>为你挑选的原文 <span class="tiny-tag">经典选读</span></h2><p id="recommend-caption">从真实原文中，寻找目标词出现的段落。</p></div><button class="text-btn" id="refresh">换一组 ↻</button></div>
@@ -45,5 +46,5 @@
  <dialog id="word-dialog"><button class="icon-btn dialog-close" id="close-word" aria-label="关闭释义">×</button><div id="word-detail"></div></dialog>
  <dialog id="about-dialog"><button class="icon-btn dialog-close" id="close-about" aria-label="关闭说明">×</button><div class="about-content"><div class="eyebrow">HELLO, WORD TRAILS</div><h2>欢迎来到词间。</h2><p>这是可运行的第一版：导入词表，阅读经典英文选段，再用原句填空巩固。</p><p>目前内容来自 Project Gutenberg 的经典作品，通过公开镜像建立本地原文库。推荐会核实目标词及支持的词形是否实际出现在选段中；暂未覆盖全网新闻。</p><p>难度标签按选段长度粗略划分，不是英语水平测评。词典提供常用释义，并非自动生成的语境翻译。</p><p>词表和复习进度保存在当前浏览器。清除网站数据或更换设备不会同步；图片只在浏览器识别，不上传到服务器。</p><p>iPhone 使用：通过 Safari 打开正式网站，选择「分享 → 添加到主屏幕」。网站独立运行，不需要电脑开机；首次使用需联网下载原文库和识别组件。</p></div></dialog>
  <div id="toast" class="toast" role="status" hidden></div>
- <script type="module" src="./app.mjs?v=20260926-3"></script>
+ <script type="module" src="./app.mjs?v=20260926-4"></script>
 </body></html>

@@ -72,3 +72,46 @@ export function buildQuiz(article, words) {
     return {word,sentence,answer:sentence.match(wordRegex(word))[0],prompt:sentence.replace(wordRegex(word),'________')};
   }).filter(Boolean);
 }
+
+// Non-overlapping, contiguous passages use the same paragraph IDs as vocabulary reading.
+export function dailyCandidates(books) {
+ const candidates=[];
+ for(const book of books.filter(b=>b.local)) {
+  const paragraphs=book.text.split(/\n\s*\n/).map(p=>p.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const counts=paragraphs.map(countWords);
+  const sections=Array.isArray(book.sections)&&book.sections.length?book.sections:[{start:0,end:paragraphs.length-1,title:''}];
+  for(const section of sections) {
+   if(!Number.isInteger(section.start)||!Number.isInteger(section.end)||section.start<0||section.end>=paragraphs.length)continue;
+  for(let start=section.start;start<=section.end;) {
+   if(counts[start]>660){start++;continue;}
+   let end=start,length=counts[start];
+   while(end+1<=section.end&&length+counts[end+1]<=660) {
+    const next=length+counts[end+1];
+    if(length>=440&&Math.abs(next-550)>=Math.abs(length-550))break;
+    length=next;end++;
+   }
+   const excerpt=paragraphs.slice(start,end+1);
+   if(excerpt[0]===section.title){length-=counts[start];excerpt.shift();}
+   if(length>=80)candidates.push({id:`${book.id}-${start}-${end}`,bookId:book.id,title:section.title||'原文选段',bookTitle:book.title,hasOriginalTitle:!!section.title,
+    author:book.author,topic:book.topic,license:book.license,local:true,daily:true,
+    paragraphs:excerpt,hits:[],wordCount:length,minutes:Math.max(1,Math.round(length/110))});
+   start=end+1;
+  }
+  }
+ }
+ return candidates;
+}
+export function chooseDailyReading(books,{date=localDate(),read=[],choice=null}={}) {
+ const candidates=dailyCandidates(books);
+ // Keep today's selection after completion or a reload, including its completed state.
+ const saved=choice?.date===date&&candidates.find(a=>a.id===choice.id);
+ if(saved&&(!isRead(saved,read)||read.some(record=>record.id===saved.id)))return saved;
+ let available=candidates.filter(a=>!isRead(a,read));
+ if(available.length>1)available=available.filter(a=>a.id!==choice?.id);
+ const fullLength=available.filter(a=>a.wordCount>=440);
+ if(fullLength.length)available=fullLength;
+ if(!available.length)return null;
+ available.sort((a,b)=>a.id.localeCompare(b.id));
+ let seed=0;for(const c of date)seed=(Math.imul(seed,31)+c.charCodeAt(0))>>>0;
+ return available[seed%available.length];
+}

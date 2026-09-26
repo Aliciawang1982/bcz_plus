@@ -1,5 +1,5 @@
-import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs?v=20260926-3';
-import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs?v=20260926-3';
+import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead,chooseDailyReading} from './core.mjs?v=20260926-4';
+import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs?v=20260926-4';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const DEFAULT={words:SAMPLE,mastered:[],label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};
@@ -9,6 +9,7 @@ let draft=[...state.words], articles=[],requestId=0,currentArticle=null,currentQ
 const asset=relative=>new URL(relative,import.meta.url).href;
 let readMode='unread', readerFinished=false;
 let undoVocabulary=null;
+let dailyArticle=null,dailyRequestId=0,dailyDate='';
 if(!Array.isArray(state.mastered))state.mastered=[];
 function fetchWithTimeout(url,ms=30000,options={}){
  const controller=new AbortController();
@@ -21,7 +22,11 @@ function loadLibrary(){
 }
 function openLocalDB(){return new Promise((resolve,reject)=>{if(!window.indexedDB)return reject(Error('当前浏览器不支持本机书库'));const request=indexedDB.open('word-trails-local',1);request.onupgradeneeded=()=>request.result.createObjectStore('books',{keyPath:'id'});request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error||Error('无法打开本机书库'));});}
 async function localDBRequest(mode,action){const db=await openLocalDB();return new Promise((resolve,reject)=>{const tx=db.transaction('books',mode),store=tx.objectStore('books');let request;try{request=action(store);}catch(e){db.close();reject(e);return;}request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error||Error('本机书库读写失败'));tx.oncomplete=()=>db.close();});}
-async function readLocalBooks(){try{return await localDBRequest('readonly',store=>store.getAll())||[];}catch(e){console.warn('Local book storage unavailable:',e.message);return [];}}
+async function readLocalBooks(){return await localDBRequest('readonly',store=>store.getAll())||[];}
+function loadLocalBooks(){
+ if(!localBooksPromise)localBooksPromise=readLocalBooks().then(books=>{localBooks=books;renderLocalBooks();return books;}).catch(e=>{localBooksPromise=null;throw e;});
+ return localBooksPromise;
+}
 async function saveLocalBook(book){return localDBRequest('readwrite',store=>store.put(book));}
 async function removeLocalBook(id){return localDBRequest('readwrite',store=>store.delete(id));}
 function renderLocalBooks(){
@@ -29,9 +34,25 @@ function renderLocalBooks(){
  target.innerHTML=localBooks.length?localBooks.map(book=>`<div class="local-book-row"><span><strong>${esc(book.title)}</strong><small>${book.format.toUpperCase()} · 本机保存</small></span><button class="text-btn" data-delete-book="${esc(book.id)}">删除</button></div>`).join(''):'<p class="hint">还没有导入本机电子书。</p>';
 }
 async function loadAllBooks(){
- const library=await loadLibrary();
- if(!localBooksPromise)localBooksPromise=readLocalBooks().then(books=>{localBooks=books;renderLocalBooks();return books;});
- return [...library,...await localBooksPromise];
+ const [library,books]=await Promise.all([loadLibrary(),loadLocalBooks().catch(()=>[])]);
+ return [...library,...books];
+}
+async function dailyReading(){
+ const id=++dailyRequestId,date=localDate(),target=$('#daily-reading');
+ try{
+  const books=await loadLocalBooks();if(id!==dailyRequestId)return;
+  dailyDate=date;
+  dailyArticle=chooseDailyReading(books,{date,read:state.read,choice:state.dailyChoice});
+  if(!dailyArticle){
+   target.innerHTML=`<div class="daily-empty"><p>${books.length?'当前没有合适的未读选段。可以导入更多电子书，继续每天阅读。':'先导入一本 EPUB 或 TXT，每天在这里读一段。'}</p><button class="btn secondary" data-import-books>导入本机电子书 ↗</button></div>`;return;
+  }
+  if(state.dailyChoice?.date!==date||state.dailyChoice?.id!==dailyArticle.id){state.dailyChoice={date,id:dailyArticle.id};save();}
+  const completed=state.read.some(record=>record.id===dailyArticle.id);
+  target.innerHTML=`<article class="daily-card"><div class="daily-meta"><span>${esc(date)} · 本机电子书</span><span class="read-status">${completed?'✓ 今日已完成':'今日推荐'}</span></div><h3>${esc(dailyArticle.title)}</h3><p class="daily-source">出自：${esc(dailyArticle.bookTitle)}</p>${dailyArticle.hasOriginalTitle?'':'<p class="hint">此文件未保留原文标题；EPUB 可重新导入以提取标题。</p>'}<p class="daily-preview">${esc(dailyArticle.paragraphs.join(' ').slice(0,300))}…</p><div class="daily-bottom"><span>${dailyArticle.wordCount} 词 · 约 ${dailyArticle.minutes} 分钟</span><button class="btn primary" data-daily-read>${completed?'重读今日选段':'开始今日阅读'} ↗</button></div>${dailyArticle.wordCount<440?'<p class="hint">剩余未读内容较短，今天先读这一小段。</p>':''}</article>`;
+ }catch{
+  if(id!==dailyRequestId)return;dailyArticle=null;
+  target.innerHTML='<div class="daily-empty"><p>暂时无法读取本机书库，请重试。</p><button class="btn secondary" data-retry-daily>重新读取</button></div>';
+ }
 }
 function loadZip(){
  if(zipPromise)return zipPromise;
@@ -44,14 +65,36 @@ function plainTextFromHTML(source){
  const blocks=[...doc.querySelectorAll('h1,h2,h3,h4,p,li,blockquote,pre')].map(node=>node.textContent.replace(/\s+/g,' ').trim()).filter(text=>text.length>=2);
  return [...new Set(blocks)].join('\n\n')||doc.body?.textContent?.replace(/\s+/g,' ').trim()||'';
 }
+function titledEpubParts(source){
+ const doc=new DOMParser().parseFromString(source,'text/html');
+ doc.querySelectorAll('script,style,nav,aside,header,footer').forEach(node=>node.remove());
+ const parts=[],seen=new Set();let title=doc.title.trim(),blocks=[];
+ const flush=()=>{if(blocks.length)parts.push({title,text:blocks.join('\n\n')});blocks=[];};
+ for(const node of doc.querySelectorAll('h1,h2,h3,h4,p,li,blockquote,pre')){
+  const text=node.textContent.replace(/\s+/g,' ').trim();if(text.length<2||seen.has(text))continue;
+  seen.add(text);
+  if(/^H[12]$/.test(node.tagName)||(!title&&/^H[34]$/.test(node.tagName))){flush();title=text;}
+  blocks.push(text);
+ }
+ flush();
+ return parts.length?parts:[{title,text:plainTextFromHTML(source)}];
+}
 function zipPathJoin(base,child){const parts=(base+'/'+child).split('/');const out=[];for(const part of parts){if(!part||part==='.')continue;if(part==='..')out.pop();else out.push(part);}return out.join('/');}
 async function parseEpub(file){
  const JSZip=await loadZip(),zip=await JSZip.loadAsync(await file.arrayBuffer());let paths=[];
  const container=zip.file('META-INF/container.xml');
  if(container){const xml=await container.async('text'),match=xml.match(/full-path=["']([^"']+)["']/i);if(match){const opfPath=decodeURIComponent(match[1]),opfFile=zip.file(opfPath);if(opfFile){const opf=await opfFile.async('text'),doc=new DOMParser().parseFromString(opf,'application/xml'),manifest=new Map([...doc.querySelectorAll('manifest item')].map(item=>[item.getAttribute('id'),item.getAttribute('href')]));paths=[...doc.querySelectorAll('spine itemref')].map(item=>manifest.get(item.getAttribute('idref'))).filter(Boolean).map(href=>zipPathJoin(opfPath.split('/').slice(0,-1).join('/'),decodeURIComponent(href)));}}}
  if(!paths.length)paths=Object.keys(zip.files).filter(name=>/\.(?:xhtml?|html?)$/i.test(name)).sort();
- const texts=[];for(const path of paths){const entry=zip.file(path);if(!entry)continue;const text=plainTextFromHTML(await entry.async('text'));if(text)texts.push(text);}
- return texts.join('\n\n');
+ const texts=[],sections=[];let offset=0;
+ for(const path of paths){
+  const entry=zip.file(path);if(!entry)continue;
+  for(const part of titledEpubParts(await entry.async('text'))){
+   const text=readableBlocks(part.text);if(!text)continue;
+   const length=text.split(/\n\s*\n/).length;
+   texts.push(text);sections.push({title:part.title,start:offset,end:offset+length-1});offset+=length;
+  }
+ }
+ return {text:texts.join('\n\n'),sections};
 }
 function readableBlocks(text){
  const blocks=text.split(/\n\s*\n/).map(p=>p.replace(/\s+/g,' ').trim()).filter(p=>p.length>=25),result=[];
@@ -60,16 +103,16 @@ function readableBlocks(text){
 }
 async function parseLocalBook(file){
  const format=file.name.toLowerCase().endsWith('.epub')?'epub':'txt';
- const text=format==='epub'?await parseEpub(file):(await file.text()).replace(/^\uFEFF/,'').replace(/\r/g,'');
- const cleaned=readableBlocks(text);
+ const parsed=format==='epub'?await parseEpub(file):null;
+ const cleaned=parsed?parsed.text:readableBlocks((await file.text()).replace(/^\uFEFF/,'').replace(/\r/g,''));
  if(cleaned.length<80)throw Error('没有提取到足够的英文正文');
- return {id:`local-${file.name}-${file.size}-${file.lastModified}`,title:file.name.replace(/\.[^.]+$/,''),author:'本机文件',topic:'本机电子书',local:true,format,text:cleaned,source:'',mirror:'',license:'内容只保存在本机 IndexedDB；请确认你拥有个人使用权。',addedAt:Date.now()};
+ return {id:`local-${file.name}-${file.size}-${file.lastModified}`,title:file.name.replace(/\.[^.]+$/,''),author:'本机文件',topic:'本机电子书',local:true,format,text:cleaned,sections:parsed?.sections||[],source:'',mirror:'',license:'内容只保存在本机 IndexedDB；请确认你拥有个人使用权。',addedAt:Date.now()};
 }
 async function importLocalBooks(files){
  const list=[...files].slice(0,10);if(!list.length)return;const status=$('#ebook-status');status.textContent='正在本机读取电子书…';
  let added=0;
  for(const file of list){try{if(file.size>80*1024*1024)throw Error('文件超过 80 MB');const book=await parseLocalBook(file);await saveLocalBook(book);localBooks=[book,...localBooks.filter(item=>item.id!==book.id)];added++;}catch(e){status.textContent=`${file.name}：${e.message}`;}}
- localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();$('#ebooks').value='';seen=[];if(added){status.textContent=`已导入 ${added} 本，内容只保存在本机。`;recommendations();toast('本机电子书已加入阅读来源。');}
+ localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();$('#ebooks').value='';seen=[];if(added){status.textContent=`已导入 ${added} 本，内容只保存在本机。`;recommendations();dailyReading();toast('本机电子书已加入阅读来源。');}
 }
 const dictionary={exonerate:['v.','免除责任；证明无罪'],stigma:['n.','污名；耻辱的标记'],anguish:['n. / v.','极度痛苦；使极度痛苦'],pictorial:['adj.','图画的；用图片表达的'],dynamite:['n. / v.','炸药；用炸药爆破'],jot:['v. / n.','匆匆记下；少量，一点点'],revoke:['v.','撤销；废除']};
 function save(){try{localStorage.setItem('word-trails-v1',JSON.stringify(state));}catch{storageOK=false;toast('当前浏览器无法保存，请勿关闭页面；可复制词表备份。');}}
@@ -102,7 +145,8 @@ function page(name){
  if(!['home','import','review'].includes(name))name='home';
  $$('.page').forEach(p=>p.hidden=p.id!==`page-${name}`);$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===name));
  if(name==='review')renderReview();
- if(name==='import'){$('#word-input').value=draft.join('\n');renderDraft();renderVocabulary();}
+ if(name==='home')dailyReading();
+ if(name==='import'){$('#word-input').value=draft.join('\n');renderDraft();renderVocabulary();loadLocalBooks().catch(()=>{$('#ebook-status').textContent='暂时无法读取本机书库，请重新打开应用重试。';});}
  history.replaceState(null,'',`#${name}`);window.scrollTo({top:0});
 }
 function renderDraft(){
@@ -144,20 +188,24 @@ function renderArticleCards(){
  }).join('');
 }
 function changeReadMode(mode){readMode=mode;$('#reading-mode').value=mode;seen=[];recommendations();}
-function openReader(index){
- currentArticle=articles[index];if(!currentArticle)return;
+function openReader(index,article=articles[index]){
+ currentArticle=article;if(!currentArticle)return;
  readerFinished=false;
- currentQuiz=buildQuiz(currentArticle,learningWords(state));
+ currentQuiz=currentArticle.daily?[]:buildQuiz(currentArticle,learningWords(state));
  const sourceLine=currentArticle.local?`<span>本机电子书 · 不上传</span><p>${esc(currentArticle.license)}</p>`:`<a href="${esc(currentArticle.source)}" target="_blank" rel="noopener noreferrer">查看原作 ↗</a><a href="${esc(currentArticle.mirror)}" target="_blank" rel="noopener noreferrer">纯文本镜像 ↗</a><p>${esc(currentArticle.license)}</p>`;
- $('#reader-content').innerHTML=`<div class="reader-body"><span class="pill" style="background:#eaf0df">${esc(currentArticle.topic)} · 原版选段 · ${currentArticle.wordCount} 词</span><h2>${esc(currentArticle.title)}</h2><p class="byline">${esc(currentArticle.author)} · 约 ${currentArticle.minutes} 分钟</p><p class="hint">点击高亮词查看常用释义。以下段落保持原文，未作简写。</p><div class="reader-article">${currentArticle.paragraphs.map(p=>`<p>${highlight(p)}</p>`).join('')}</div><div class="source-line">${sourceLine}</div><button class="btn primary full reading-action" id="finish-reading">读完了，用原句巩固一下 →</button><div id="reading-quiz"></div></div>`;
+ $('#reader-content').innerHTML=`<div class="reader-body"><span class="pill" style="background:#eaf0df">${currentArticle.daily?'每日五分钟':esc(currentArticle.topic)} · 原版选段 · ${currentArticle.wordCount} 词</span><h2>${esc(currentArticle.title)}</h2><p class="byline">${currentArticle.daily?`出自：${esc(currentArticle.bookTitle)}`:esc(currentArticle.author)} · 约 ${currentArticle.minutes} 分钟</p><p class="hint">${currentArticle.daily?'自由阅读，不安排词表填空。':'点击高亮词查看常用释义。'}以下段落保持原文，未作简写。</p><div class="reader-article">${currentArticle.paragraphs.map(p=>`<p>${currentArticle.daily?esc(p):highlight(p)}</p>`).join('')}</div><div class="source-line">${sourceLine}</div><button class="btn primary full reading-action" id="finish-reading">${currentArticle.daily?'读完了，完成今日阅读 ✓':'读完了，用原句巩固一下 →'}</button><div id="reading-quiz"></div></div>`;
  $('#reader').showModal();$('#reader').scrollTop=0;
 }
 function quizHTML(q,index,context){return `<div class="question"><p>${esc(q.prompt)}</p><form class="answer-row" data-quiz-context="${context}" data-index="${index}"><input name="answer" aria-label="${context==='review'?'复习':'阅读'}第 ${index+1} 题答案" placeholder="填入原句中的词形" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="40"><button class="btn primary" type="submit">核对答案</button></form><div class="feedback" aria-live="polite"></div></div>`;}
 function finishReading(){
  // Keep every completed range. Re-reading must not discard older records or count as new reading.
- if(!isRead(currentArticle,state.read))state.read=markRead(state.read,currentArticle,localDate());
+ if(currentArticle.daily||!isRead(currentArticle,state.read))state.read=markRead(state.read,currentArticle,localDate());
  save();stats();readerFinished=true;renderArticleCards();
  $('#finish-reading').hidden=true;
+ if(currentArticle.daily){
+  $('#reading-quiz').innerHTML='<div class="quiz-box"><h3>这段阅读已完成。</h3><p class="hint">已记录阅读进度，明天再来读一段。</p><button class="btn secondary" data-close-daily>返回今日阅读</button></div>';
+  dailyReading();$('#reading-quiz').scrollIntoView({behavior:'smooth',block:'start'});return;
+ }
  $('#reading-quiz').innerHTML=`<div class="quiz-box"><h3>把熟悉，变成记得。</h3><p class="hint">根据刚刚的原句填空。答题后安排下一次复习。</p>${currentQuiz.map((q,i)=>quizHTML(q,i,'reading')).join('')}</div>`;
  $('#reading-quiz').scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -226,11 +274,15 @@ document.addEventListener('click',event=>{
  if(target.dataset.page)page(target.dataset.page);
  if(target.dataset.word)showWord(target.dataset.word);
  if(target.dataset.read!==undefined)openReader(Number(target.dataset.read));
+ if(target.hasAttribute('data-daily-read'))openReader(null,dailyArticle);
+ if(target.hasAttribute('data-retry-daily'))dailyReading();
+ if(target.hasAttribute('data-close-daily'))$('#reader').close();
+ if(target.hasAttribute('data-import-books')){page('import');$('.local-book-box').scrollIntoView({behavior:'smooth',block:'start'});}
  if(target.dataset.readingMode)changeReadMode(target.dataset.readingMode);
  if(target.dataset.mastery){const word=target.dataset.mastery;const mastered=!state.mastered.includes(word);vocabularyChanged(setMastered(state,word,mastered),mastered?'已掌握：不再用于推荐和复习。':'已恢复学习。');}
  if(target.dataset.deleteWord)vocabularyChanged(deleteWord(state,target.dataset.deleteWord),'已移除单词，可点击「撤销上次修改」恢复。');
  if(target.dataset.remove){draft=draft.filter(w=>w!==target.dataset.remove);$('#word-input').value=draft.join('\n');renderDraft();}
- if(target.dataset.deleteBook){removeLocalBook(target.dataset.deleteBook).then(()=>{localBooks=localBooks.filter(book=>book.id!==target.dataset.deleteBook);localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();seen=[];recommendations();toast('本机电子书已删除。');}).catch(()=>toast('删除失败，请重试。'));}
+ if(target.dataset.deleteBook){removeLocalBook(target.dataset.deleteBook).then(()=>{localBooks=localBooks.filter(book=>book.id!==target.dataset.deleteBook);localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();seen=[];recommendations();dailyReading();toast('本机电子书已删除。');}).catch(()=>toast('删除失败，请重试。'));}
  if(target.id==='finish-reading')finishReading();
 });
 document.addEventListener('submit',event=>{
@@ -254,7 +306,7 @@ $('#screenshots').onchange=e=>recognize(e.target.files);
 $('#ebooks').onchange=e=>importLocalBooks(e.target.files);
 $('#refresh').onclick=recommendations;
 $('#reading-mode').onchange=e=>changeReadMode(e.target.value);
-$('#reader').addEventListener('close',()=>{if(readerFinished){readerFinished=false;recommendations();}});
+$('#reader').addEventListener('close',()=>{if(readerFinished){readerFinished=false;recommendations();dailyReading();}});
 $('#start-reading').onclick=()=>articles.length?openReader(0):$('#articles').scrollIntoView({behavior:'smooth'});
 $('#close-reader').onclick=()=>$('#reader').close();$('#close-word').onclick=()=>$('#word-dialog').close();
 $('#about').onclick=()=>$('#about-dialog').showModal();$('#close-about').onclick=()=>$('#about-dialog').close();
@@ -263,6 +315,8 @@ $('#length').onchange=e=>{state.preferences.short=e.target.value==='short';save(
 $('#topic').onchange=e=>{state.preferences.topic=e.target.value;save();seen=[];recommendations();};
 $('#date-label').textContent=new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});
 window.addEventListener('hashchange',()=>page(location.hash.slice(1)));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&dailyDate!==localDate())dailyReading();});
+setInterval(()=>{if(!document.hidden&&dailyDate!==localDate())dailyReading();},60000);
 stats();renderDraft();renderLocalBooks();page(location.hash.slice(1)||'home');recommendations();
 if(!storageOK)toast('当前浏览器无法持久保存进度。');
 if('serviceWorker' in navigator&&window.isSecureContext)navigator.serviceWorker.register(asset('sw.js'),{updateViaCache:'none'}).catch(()=>{});

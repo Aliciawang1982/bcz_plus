@@ -1,5 +1,5 @@
-import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs?v=20260926-2';
-import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs?v=20260926-2';
+import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead} from './core.mjs?v=20260926-3';
+import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs?v=20260926-3';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const DEFAULT={words:SAMPLE,mastered:[],label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};

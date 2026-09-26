@@ -1,5 +1,5 @@
-const VERSION='20260926-2';
-const CACHE='word-trails-static-v6';
+const VERSION='20260926-3';
+const CACHE='word-trails-static-v7';
 const asset=path=>new URL(path,self.registration.scope).href;
 // Keep these URLs in step with index.html and the module imports in app.mjs.
 const SHELL=['./','style.css','app.mjs','core.mjs','vocabulary.mjs','icon.svg'].map(path=>asset(/\.(css|mjs)$/.test(path)?`${path}?v=${VERSION}`:path));

@@ -1,5 +1,5 @@
-import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead,chooseDailyReading} from './core.mjs?v=20260926-4';
-import {learningWords,learningReviews,setMastered,editWord,deleteWord} from './vocabulary.mjs?v=20260926-4';
+import {SAMPLE,normalizeWords,wordRegex,forms,buildQuiz,schedule,localDate,recommend,isRead,markRead,chooseDailyReading} from './core.mjs?v=20260926-5';
+import {learningWords,learningReviews,setMastered,editWord,deleteWord,selectedWord,addReadingWord} from './vocabulary.mjs?v=20260926-5';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const DEFAULT={words:SAMPLE,mastered:[],label:'截图示例 · 7 个词',isSample:true,read:[],reviews:{},preferences:{short:false,topic:'all'}};
@@ -10,6 +10,7 @@ const asset=relative=>new URL(relative,import.meta.url).href;
 let readMode='unread', readerFinished=false;
 let undoVocabulary=null;
 let dailyArticle=null,dailyRequestId=0,dailyDate='';
+let readerWord='';
 if(!Array.isArray(state.mastered))state.mastered=[];
 function fetchWithTimeout(url,ms=30000,options={}){
  const controller=new AbortController();
@@ -188,13 +189,53 @@ function renderArticleCards(){
  }).join('');
 }
 function changeReadMode(mode){readMode=mode;$('#reading-mode').value=mode;seen=[];recommendations();}
+function selectableText(text){
+ return text.split(/([A-Za-z]+(?:['’-][A-Za-z]+)*)/g).map((part,i)=>i%2&&selectedWord(part)?`<span class="reading-word" role="button" tabindex="0" data-select-reading-word="${esc(selectedWord(part))}" aria-label="选词 ${esc(part)}">${esc(part)}</span>`:esc(part)).join('');
+}
+function renderReaderWord(message=''){
+ const bar=$('#reader-vocabulary');bar.hidden=!currentArticle?.daily;
+ if(!currentArticle?.daily)return;
+ const exists=state.words.includes(readerWord),mastered=state.mastered.includes(readerWord),full=!exists&&state.words.length>=100;
+ $('#reader-selected-word').textContent=readerWord||'点选正文单词';
+ $('#reader-word-status').textContent=message||(readerWord?(full?'词库已满 100 词，请先移除一些词。':mastered?'这个词已掌握，可以恢复学习。':exists?'已在词库中，无需重复添加。':'加入后可用于词表阅读。'):'也可长按选中一个英文单词。');
+ const add=$('#add-reader-word');add.disabled=!readerWord||full||(exists&&!mastered);
+ add.textContent=mastered?(exists?'恢复学习':'加入并恢复学习'):exists?'已在词库':'加入词库 ＋';
+}
+function chooseReaderWord(word){
+ readerWord=selectedWord(word);renderReaderWord(readerWord?'':'请只选中一个完整的英文单词。');
+}
+function saveReaderWord(){
+ if(!currentArticle?.daily||!readerWord)return;
+ try{
+  const restored=state.mastered.includes(readerWord),next=addReadingWord(state,readerWord,{restore:restored});
+  if(next!==state){
+   undoVocabulary={words:[...state.words],mastered:[...state.mastered],reviews:structuredClone(state.reviews)};
+   state=next;save();draft=[...new Set([...draft,readerWord])];$('#word-input').value=draft.join('\n');
+   stats();renderDraft();renderVocabulary();renderReview();seen=[];recommendations();
+  }
+  renderReaderWord(storageOK?(restored?'已恢复学习。':'已加入词库。'):'已加入，但本机保存失败，请勿关闭页面。');
+ }catch(e){renderReaderWord(e.message);}
+}
+document.addEventListener('selectionchange',()=>{
+ if(!currentArticle?.daily||!$('#reader').open)return;
+ const selection=window.getSelection(),article=$('#reader .reader-article');
+ // Keep the last word when tapping the action bar collapses the native iPhone selection.
+ if(!selection||selection.isCollapsed)return;
+ if(!article?.contains(selection.anchorNode)||!article.contains(selection.focusNode))return;
+ chooseReaderWord(selection.toString());
+});
+$('#reader').addEventListener('keydown',event=>{
+ const word=event.target.closest('[data-select-reading-word]');
+ if(word&&(event.key==='Enter'||event.key===' ')){event.preventDefault();chooseReaderWord(word.dataset.selectReadingWord);}
+});
 function openReader(index,article=articles[index]){
  currentArticle=article;if(!currentArticle)return;
  readerFinished=false;
+ readerWord='';
  currentQuiz=currentArticle.daily?[]:buildQuiz(currentArticle,learningWords(state));
  const sourceLine=currentArticle.local?`<span>本机电子书 · 不上传</span><p>${esc(currentArticle.license)}</p>`:`<a href="${esc(currentArticle.source)}" target="_blank" rel="noopener noreferrer">查看原作 ↗</a><a href="${esc(currentArticle.mirror)}" target="_blank" rel="noopener noreferrer">纯文本镜像 ↗</a><p>${esc(currentArticle.license)}</p>`;
- $('#reader-content').innerHTML=`<div class="reader-body"><span class="pill" style="background:#eaf0df">${currentArticle.daily?'每日五分钟':esc(currentArticle.topic)} · 原版选段 · ${currentArticle.wordCount} 词</span><h2>${esc(currentArticle.title)}</h2><p class="byline">${currentArticle.daily?`出自：${esc(currentArticle.bookTitle)}`:esc(currentArticle.author)} · 约 ${currentArticle.minutes} 分钟</p><p class="hint">${currentArticle.daily?'自由阅读，不安排词表填空。':'点击高亮词查看常用释义。'}以下段落保持原文，未作简写。</p><div class="reader-article">${currentArticle.paragraphs.map(p=>`<p>${currentArticle.daily?esc(p):highlight(p)}</p>`).join('')}</div><div class="source-line">${sourceLine}</div><button class="btn primary full reading-action" id="finish-reading">${currentArticle.daily?'读完了，完成今日阅读 ✓':'读完了，用原句巩固一下 →'}</button><div id="reading-quiz"></div></div>`;
- $('#reader').showModal();$('#reader').scrollTop=0;
+ $('#reader-content').innerHTML=`<div class="reader-body"><span class="pill" style="background:#eaf0df">${currentArticle.daily?'每日五分钟':esc(currentArticle.topic)} · 原版选段 · ${currentArticle.wordCount} 词</span><h2>${esc(currentArticle.title)}</h2><p class="byline">${currentArticle.daily?`出自：${esc(currentArticle.bookTitle)}`:esc(currentArticle.author)} · 约 ${currentArticle.minutes} 分钟</p><p class="hint">${currentArticle.daily?'点选或长按选中英文单词，可加入词库。自由阅读不安排填空。':'点击高亮词查看常用释义。'}以下段落保持原文，未作简写。</p><div class="reader-article">${currentArticle.paragraphs.map(p=>`<p>${currentArticle.daily?selectableText(p):highlight(p)}</p>`).join('')}</div><div class="source-line">${sourceLine}</div><button class="btn primary full reading-action" id="finish-reading">${currentArticle.daily?'读完了，完成今日阅读 ✓':'读完了，用原句巩固一下 →'}</button><div id="reading-quiz"></div></div>`;
+ renderReaderWord();$('#reader').showModal();$('#reader').scrollTop=0;
 }
 function quizHTML(q,index,context){return `<div class="question"><p>${esc(q.prompt)}</p><form class="answer-row" data-quiz-context="${context}" data-index="${index}"><input name="answer" aria-label="${context==='review'?'复习':'阅读'}第 ${index+1} 题答案" placeholder="填入原句中的词形" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="40"><button class="btn primary" type="submit">核对答案</button></form><div class="feedback" aria-live="polite"></div></div>`;}
 function finishReading(){
@@ -285,6 +326,16 @@ document.addEventListener('click',event=>{
  if(target.dataset.deleteBook){removeLocalBook(target.dataset.deleteBook).then(()=>{localBooks=localBooks.filter(book=>book.id!==target.dataset.deleteBook);localBooksPromise=Promise.resolve(localBooks);renderLocalBooks();seen=[];recommendations();dailyReading();toast('本机电子书已删除。');}).catch(()=>toast('删除失败，请重试。'));}
  if(target.id==='finish-reading')finishReading();
 });
+$('#reader').addEventListener('click',event=>{
+ const word=event.target.closest('[data-select-reading-word]');
+ if(word&&currentArticle?.daily){
+  const selection=window.getSelection();
+  if(selection&&!selection.isCollapsed)return;
+  chooseReaderWord(word.dataset.selectReadingWord);
+ }
+});
+$('#add-reader-word').onclick=saveReaderWord;
+$('#clear-reader-word').onclick=()=>{readerWord='';window.getSelection()?.removeAllRanges();renderReaderWord();};
 document.addEventListener('submit',event=>{
  if(event.target.matches('[data-quiz-context]')){event.preventDefault();submitQuiz(event.target);}
  if(event.target.matches('[data-edit-vocabulary]')){event.preventDefault();try{const next=editWord(state,event.target.dataset.editVocabulary,event.target.elements.word.value);if(next!==state)vocabularyChanged(next,'拼写已更新；旧拼写的练习已移除。');}catch(e){toast(e.message);}}

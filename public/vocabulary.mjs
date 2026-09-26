@@ -27,3 +27,16 @@ export function deleteWord(state,word) {
   const reviews={...state.reviews};delete reviews[word];
   return {...state,words:state.words.filter(w=>w!==word),reviews};
 }
+export function selectedWord(text) {
+ const word=String(text).trim().replace(/^["“”‘’'([{]+|["“”‘’')\]},.!?:;]+$/g,'').toLowerCase().replaceAll('’',"'");
+ return word.length>=2&&word.length<=32&&/^[a-z]+(?:['-][a-z]+)*$/.test(word)?word:'';
+}
+export function addReadingWord(state,input,{restore=false}={}) {
+ const word=selectedWord(input);
+ if(!word)throw Error('请选中一个完整的英文单词。');
+ const exists=state.words.includes(word);
+ if(!exists&&state.words.length>=100)throw Error('词库已满 100 个词，请先在「我的词表」移除一些词。');
+ if(exists&&!restore)return state;
+ const next={...state,isSample:false,words:exists?state.words:[...state.words,word]};
+ return restore?setMastered(next,word,false):next;
+}

@@ -74,6 +74,8 @@ EPUB 导入会保留文章/章节标题；每日卡片与阅读器显示原文�
 
 这是应用内每日推荐，打开应用时显示，不发送 iPhone 系统通知。全文仍只保存在本机 IndexedDB；每日选择和完成记录保存在当前浏览器，不跨设备同步。每日推荐独立读取本机书库，不依赖公开原文库下载。
 
+每日阅读正文支持点选或长按选中一个英文单词，再点击阅读器底部「加入词库」。单词以小写和原文词形保存，不自动还原词根。已在词库的词不重复添加，已掌握词可明确点击「恢复学习」。词库满 100 词时会提示先移除一些词，不覆盖旧词。添加后继续停留在原文，进度与当天选段保留。
+
 ## 内容来源与当前边界
 
 目前为 **3 部英文经典作品的本地原文检索**，不是全网新闻搜索。作品为 Arthur Conan Doyle《The Adventures of Sherlock Holmes》、Nathaniel Hawthorne《The Scarlet Letter》和 Bram Stoker《Dracula》。原文来自 Project Gutenberg，下载通过 GITenberg 的 jsDelivr 镜像；每条选段保留原作与镜像链接。完整下载文件（含 Gutenberg 许可说明）保存在 `data/originals/`。
